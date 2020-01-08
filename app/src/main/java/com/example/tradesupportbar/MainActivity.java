@@ -5,6 +5,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
@@ -38,13 +39,50 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
+import android.media.AudioAttributes;
+import android.media.AudioManager;
+import android.media.SoundPool;
+import android.util.Log;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
 
 public class MainActivity extends AppCompatActivity {
     Timer mTimer = null;
+    SoundPlayer soundPlayer = null;
+    Boolean playingSound = false;
+
+    EditText upEditText = null;
+    EditText downEditText = null;
+    Button saveButton = null;
+    SharedPreferences data = null;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        soundPlayer = new SoundPlayer(this);
+
+        upEditText = findViewById(R.id.upEditText);
+        downEditText = findViewById(R.id.downEditText);
+
+        data = getSharedPreferences("Data", MODE_PRIVATE);
+
+        upEditText.setText(data.getString("DataUpNumber", "0"));
+        downEditText.setText(data.getString("DataDownNumber", "0"));
+
+        saveButton = findViewById(R.id.saveButton);
+        saveButton.setOnClickListener(new View.OnClickListener() {
+              @Override
+              public void onClick(View v) {
+                  soundPlayer.stop();
+                  SharedPreferences.Editor editor = data.edit();
+                  editor.putString("DataUpNumber", upEditText.getText().toString());
+                  editor.putString("DataDownNumber", downEditText.getText().toString());
+                  editor.apply();
+              }
+         });
+
         mTimer = new Timer(true);
         mTimer.schedule(new TimerTask() {
             @Override
@@ -91,8 +129,14 @@ public class MainActivity extends AppCompatActivity {
                         urlConnection.disconnect();
                     }
                 }
+
                 try {
                     createNotify(responseData);
+                    checkAlert(
+                        responseData,
+                        data.getString("DataUpNumber", "0"),
+                        data.getString("DataDownNumber", "0")
+                    );
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -165,13 +209,59 @@ public class MainActivity extends AppCompatActivity {
         }
         manager.notify((int) (Math.random()), notification); // 0は識別子。何でも良い
     }
+
     public static String getNowDate(){
         final DateFormat df = new SimpleDateFormat("HH:mm:ss");
         final Date date = new Date(System.currentTimeMillis());
         return df.format(date);
     }
 
-    private static JsonNode readJsonNode(String json) throws IOException {
+    void checkAlert (String response, String upNumberText, String downNumberText) throws IOException {
+        // 通知を作成するビルダーの生成
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(
+                MainActivity.this,
+                "my_channel_01");
+
+        // 通知のアイコン
+        builder.setSmallIcon(android.R.drawable.ic_dialog_info);
+        ObjectMapper mapper = new ObjectMapper();
+
+        JsonNode root = mapper.readTree(response);
+
+        // get()で指定したキーに対応するJsonNodeを取得できる
+        JsonNode last = root.get("data").get(0).get("last");
+        double upNumber = 0;
+        try {
+            upNumber = Double.parseDouble(upNumberText);
+        } catch (Exception e) {
+            upNumber = 0;
+        }
+        double downNumber = 0;
+        try {
+            downNumber = Double.parseDouble(downNumberText);
+        } catch (Exception e) {
+            downNumber = 0;
+        }
+        Log.d("s", "checkAlert: " + last.asDouble() + ">=" + upNumber );
+        if (!Double.isNaN(upNumber) && upNumber > 0 && last.asDouble() >= upNumber) {
+            //if (!playingSound) {
+                playingSound = true;
+                soundPlayer.playUpSound();
+            //}
+        }
+        Log.d("sa", "checkAlert: " + last.asDouble() + "<=" + downNumber );
+        if (!Double.isNaN(downNumber) && downNumber > 0 && last.asDouble() <= downNumber) {
+            //if (!playingSound) {
+                playingSound = true;
+                soundPlayer.playDownSound();
+            //}
+        }
+
+    }
+
+
+
+        private static JsonNode readJsonNode(String json) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
 
         // JSON文字列を読み込み、JsonNodeオブジェクトに変換（Fileやbyte[]も引数に取れる）
