@@ -55,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
     EditText upEditText = null;
     EditText downEditText = null;
     Button saveButton = null;
+    Button notifyButton = null;
     SharedPreferences data = null;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,13 +66,15 @@ public class MainActivity extends AppCompatActivity {
 
         upEditText = findViewById(R.id.upEditText);
         downEditText = findViewById(R.id.downEditText);
+        saveButton = findViewById(R.id.saveButton);
+        notifyButton = findViewById(R.id.notifyButton);
 
         data = getSharedPreferences("Data", MODE_PRIVATE);
+        handleNotify(data);
 
         upEditText.setText(data.getString("DataUpNumber", "0"));
         downEditText.setText(data.getString("DataDownNumber", "0"));
 
-        saveButton = findViewById(R.id.saveButton);
         saveButton.setOnClickListener(new View.OnClickListener() {
               @Override
               public void onClick(View v) {
@@ -82,6 +85,14 @@ public class MainActivity extends AppCompatActivity {
                   editor.apply();
               }
          });
+        notifyButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                soundPlayer.stop();
+                handleNotify(data);
+            }
+        });
+
 
         mTimer = new Timer(true);
         mTimer.schedule(new TimerTask() {
@@ -131,7 +142,9 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 try {
-                    createNotify(responseData);
+                    if (data.getBoolean("isNotifying", false)) {
+                        createNotify(responseData);
+                    }
                     checkAlert(
                         responseData,
                         data.getString("DataUpNumber", "0"),
@@ -144,6 +157,14 @@ public class MainActivity extends AppCompatActivity {
             }
         }, 0, 5000);
 
+    }
+
+    public void handleNotify(SharedPreferences data) {
+        SharedPreferences.Editor editor = data.edit();
+        boolean isNotifying = data.getBoolean("isNotifying", false);
+        editor.putBoolean("isNotifying", !isNotifying);
+        notifyButton.setText(isNotifying ? "Notify: ON→OFF" : "Notify: OFF→ON");
+        editor.apply();
     }
 
     public String convertToString(InputStream stream, int num) throws IOException {
